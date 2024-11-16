@@ -70,8 +70,18 @@ def fetch_redbus_data(connection, state=None, route_name=None, bus_name=None, bu
         query += " AND bus_type = %s"
         params.append(bus_type)
 
+    # Exclude rows with NULL or empty fields in the key columns
+    query += " AND state IS NOT NULL AND state != ''"
+    query += " AND route_name IS NOT NULL AND route_name != ''"
+    query += " AND bus_name IS NOT NULL AND bus_name != ''"
+    query += " AND bus_type IS NOT NULL AND bus_type != ''"
+
     cursor.execute(query, params)
     result = cursor.fetchall()
+
+    # If no rows are returned
+    if not result:
+        return pd.DataFrame()
 
     df = pd.DataFrame(result)
 
@@ -85,17 +95,23 @@ def fetch_redbus_data(connection, state=None, route_name=None, bus_name=None, bu
 
 def get_distinct_states(connection):
     """
-    Retrieves a list of distinct states from the database.
+    Retrieves a list of distinct states and their corresponding state names from the redbus_state_transport table.
 
     Args:
         connection: The database connection object.
 
     Returns:
-        list: A list of states.
+        list of tuples: A list of tuples where each tuple contains (state, state_name).
     """
     cursor = connection.cursor()
-    cursor.execute("SELECT DISTINCT state FROM redbus")
-    return [row[0] for row in cursor.fetchall()]
+    query = """
+        SELECT r.state, s.state_name 
+        FROM redbus r
+        JOIN redbus_state_transport s ON r.state = s.state  -- Corrected foreign key relationship
+        GROUP BY r.state, s.state_name
+    """
+    cursor.execute(query)
+    return cursor.fetchall()
 
 
 def get_routes_by_state(connection, state):
@@ -207,9 +223,14 @@ def main():
 
     # Step 1: Select State
     states = get_distinct_states(connection)
-    state = st.sidebar.selectbox("Select State", ["None"] + states)
+    state_options = [state[0] for state in states]
+    state_name_dict = {state[0]: state[1] for state in states}
+    state = st.sidebar.selectbox("Select State", ["None"] + state_options)
 
     if state and state != "None":
+        state_name = state_name_dict.get(state, "Unknown")
+        st.sidebar.markdown(f"**State Selected: <span style='color:red'>{state_name}</span>**", unsafe_allow_html=True)
+
         # Step 2: Select Route Name
         route_names = get_routes_by_state(connection, state)
         route_name = st.sidebar.selectbox("Select Route Name", ["None"] + route_names)
