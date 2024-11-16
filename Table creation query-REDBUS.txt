@@ -1,0 +1,23 @@
+CREATE TABLE redbus (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    route_name VARCHAR(200),
+    route_link VARCHAR(200),
+    bus_name VARCHAR(100),
+    bus_type VARCHAR(100),
+    departing_time TIME(6),
+    duration varchar(20),
+    reaching_time TIME(6),
+    star_rating FLOAT,
+    price DECIMAL(10, 2),
+    seats_available INT
+);
+ALTER TABLE redbus MODIFY COLUMN star_rating FLOAT NULL;
+ALTER TABLE redbus1 MODIFY COLUMN duration VARCHAR(20);
+describe redbus1;
+CREATE TABLE state_redbus_info (
+    route_name VARCHAR(200),
+    state_name VARCHAR(100),
+    FOREIGN KEY (route_name) REFERENCES redbus(route_name)
+);
+
+
