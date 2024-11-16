@@ -49,14 +49,15 @@ Before you begin, ensure you have the following installed:
 
 ---
 
-## Installation and Usage ⚙️  
+## Usage ⚙️  
 
-### 1. Clone the Repository  
+ 1. Clone the Repository  
 ```bash
 git clone https://github.com/datascientist-ld1981/redbus-travel-system.git
 cd redbus-travel-system
+---
 
-## 2. Project Structure
+2. Project Structure
 /redbus-travel-system
     ├── /assets                  # Contains image assets for the dashboard
     ├── /database                # MySQL database and schema files
@@ -68,14 +69,17 @@ cd redbus-travel-system
     ├── requirements.txt         # Python dependencies
     ├── README.md                # Project documentation
     └── Table creation query-REDBUS.txt  # MySQL database schema
-## 3. Create Table in MYSQL from the text file
 
-## 4. Scrape Data from RedBus
+
+3. Create Table in MySQL from the Text File
+
+
+4. Scrape Data from RedBus
 Run the DataScrapping-Redbus(Pep8&257).ipynb Jupyter notebook to collect bus data from the RedBus website and store it in the MySQL database. You can execute this notebook in JupyterLab or Jupyter Notebook:
 ```bash
 jupyter notebook DataScrapping-Redbus(Pep8&257).ipynb
 
-## 5. Start the Streamlit Dashboard
+5. Start the Streamlit Dashboard
 Once the data is scraped and stored in the database, you can start the interactive Streamlit dashboard by running:
 ```bash
 streamlit run redbusStreamlit.py
