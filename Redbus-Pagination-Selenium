@@ -1,0 +1,164 @@
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException, ElementClickInterceptedException
+import pymysql
+import time
+import re
+
+# MySQL Connection
+pymysql.install_as_MySQLdb()
+conn = pymysql.connect(host='localhost', database='guvi', user='root', password='root')
+cursor = conn.cursor()
+
+# Create table if it doesn't exist
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS redbus (
+    state VARCHAR(100),
+    route_name VARCHAR(255),
+    route_link VARCHAR(255),
+    bus_name VARCHAR(255),
+    bus_type VARCHAR(100),
+    departing_time VARCHAR(50),
+    duration VARCHAR(50),
+    reaching_time VARCHAR(50),
+    star_rating FLOAT DEFAULT 0.0,
+    price FLOAT,
+    seats_available INT
+)
+""")
+conn.commit()
+
+# Set up WebDriver
+driver = webdriver.Chrome()
+driver.get("https://www.redbus.in/")
+
+# Wait for RTC names to load
+rtc_name_elements = WebDriverWait(driver, 30).until(
+    EC.presence_of_all_elements_located((By.CLASS_NAME, "rtcName"))
+)
+
+# Loop through all RTC names
+for rtc_index in range(len(rtc_name_elements)):
+    rtc_element = rtc_name_elements[rtc_index]
+
+    # Scroll to RTC name element and wait for it to be clickable
+    driver.execute_script("arguments[0].scrollIntoView(true);", rtc_element)
+    WebDriverWait(driver, 30).until(EC.element_to_be_clickable((By.CLASS_NAME, "rtcName")))
+
+    # Click RTC name
+    rtcName = rtc_element.text
+    print(f"\nClicking RTC name {rtc_index + 1}: {rtcName}")
+    driver.execute_script("arguments[0].click();", rtc_element)
+
+    # Wait for the route elements to load
+    WebDriverWait(driver, 30).until(
+        EC.presence_of_all_elements_located((By.CLASS_NAME, "route"))
+    )
+
+    # Pagination: Process up to 3 pages
+    for page in range(1, 4):
+        print(f"Processing RTC: {rtcName}, Page: {page}")
+
+        # Extract route details
+        route_elements = driver.find_elements(By.CLASS_NAME, "route")
+        for route in route_elements:
+            route_name = route.text
+            route_link = f"https://redbus.in/bus-tickets/{route_name.replace(' ', '-').lower()}"
+            print(f"\nBus Route Name: {route_name}")
+            print(f"Bus Route Link: {route_link}")
+
+            # Open ticket link in a new window
+            driver.execute_script("window.open(arguments[0]);", route_link)
+            time.sleep(2)
+            driver.switch_to.window(driver.window_handles[-1])
+
+            try:
+                # Wait for bus details to load
+                WebDriverWait(driver, 20).until(
+                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".travels.lh-24.f-bold.d-color"))
+                )
+
+                # Scrape bus details
+                bus_name_elements = driver.find_elements(By.CSS_SELECTOR, ".travels.lh-24.f-bold.d-color")
+                bus_type_elements = driver.find_elements(By.CSS_SELECTOR, ".bus-type.f-12.m-top-16.l-color.evBus")
+                departing_time_elements = driver.find_elements(By.CSS_SELECTOR, ".dp-time.f-19.d-color.f-bold")
+                duration_elements = driver.find_elements(By.CSS_SELECTOR, ".dur.l-color.lh-24")
+                reaching_time_elements = driver.find_elements(By.CSS_SELECTOR, ".bp-time.f-19.d-color.disp-Inline")
+                star_rating_elements = driver.find_elements(By.CSS_SELECTOR, ".icon.icon-ic-star.d-block")
+                price_elements = driver.find_elements(By.CSS_SELECTOR, ".fare.d-block")
+                seats_available_elements = driver.find_elements(By.CSS_SELECTOR, ".seat-left.m-top-30")
+
+                # Extract details for each bus
+                for bus_name, bus_type, departing_time, duration, reaching_time, star_rating, price, seats_available in zip(
+                        bus_name_elements, bus_type_elements, departing_time_elements, duration_elements,
+                        reaching_time_elements, star_rating_elements, price_elements, seats_available_elements):
+                    
+                    # Extract price and seats available
+                    price_value = float(re.search(r'\d+', price.text).group()) if re.search(r'\d+', price.text) else 0.0
+                    seats_available_value = int(re.search(r'\d+', seats_available.text).group()) if re.search(r'\d+', seats_available.text) else 0
+                    
+                    # Extract star rating, default to 0.0 if not available
+                    star_rating_value = float(star_rating.text.strip()) if star_rating and star_rating.text.strip() else 0.0
+
+                    # Insert data into the database
+                    # Insert data into the database
+                    cursor.execute("""
+                            INSERT INTO redbus (state, route_name, route_link, bus_name, bus_type, departing_time, duration, 
+                        reaching_time, star_rating, price, seats_available)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """, (
+                        rtcName, route_name, route_link, bus_name.text, bus_type.text,
+                        departing_time.text, duration.text, reaching_time.text,
+                        star_rating_value, price_value, seats_available_value
+                    ))
+                    conn.commit()
+
+                    # Print details of inserted data
+                    print(f"""
+                    Data Inserted:
+                    State: {rtcName}
+                    Route Name: {route_name}
+                    Route Link: {route_link}
+                    Bus Name: {bus_name.text}
+                    Bus Type: {bus_type.text}
+                    Departing Time: {departing_time.text}
+                    Duration: {duration.text}
+                    Reaching Time: {reaching_time.text}
+                    Star Rating: {star_rating_value}
+                    Price: {price_value}
+                    Seats Available: {seats_available_value}
+                    """)
+
+                    print("Data inserted successfully!")
+
+            except (TimeoutException, WebDriverException) as e:
+                print(f"Failed to scrape bus details on {route_link}. Error: {e}")
+
+            # Close the ticket page and return to the route page
+            driver.close()
+            driver.switch_to.window(driver.window_handles[0])
+
+        # Pagination: Click next page if available
+        try:
+            pagination_tabs = driver.find_elements(By.CLASS_NAME, "DC_117_pageTabs")
+            if len(pagination_tabs) > page:  # Check if the next page exists
+                next_page = pagination_tabs[page]
+                driver.execute_script("arguments[0].click();", next_page)
+                time.sleep(3)  # Short delay for loading
+            else:
+                break  # Exit pagination loop
+        except Exception as e:
+            print("Pagination not available or completed.")
+            break
+
+    # Return to the main RTC page
+    driver.back()
+    rtc_name_elements = WebDriverWait(driver, 30).until(
+        EC.presence_of_all_elements_located((By.CLASS_NAME, "rtcName"))
+    )
+
+# Close WebDriver and database connection
+driver.quit()
+conn.close()
